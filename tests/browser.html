@@ -1,0 +1,72 @@
+<!doctype html><meta charset="utf-8"><title>ERP browser checks</title><pre id="result">RUNNING</pre><iframe src="../index.html" style="width:1400px;height:1000px"></iframe><script>
+const frame=document.querySelector('iframe');
+frame.onload=async()=>{
+  const w=frame.contentWindow,d=w.document,checks=[];
+  const assert=(ok,label)=>{if(!ok)throw Error(label);checks.push(label)};
+  const click=selector=>{const el=d.querySelector(selector);assert(el,'control exists: '+selector);el.click()};
+  try{
+    assert(d.documentElement.lang==='uz','boots in UZ');
+    assert(!d.querySelector('#overlay').hidden,'Russian language prompt opens');
+    click('[data-action="use-ru"]');assert(d.documentElement.lang==='ru','Russian prompt changes language');
+    const lang=d.querySelector('#language');lang.value='en';lang.dispatchEvent(new w.Event('change',{bubbles:true}));
+    assert(d.querySelector('h1').textContent==='Business overview','English selector changes UI');
+    assert(d.querySelectorAll('#profile').length===1&&!d.querySelector('.sidebar .avatar'),'one profile icon');
+    assert(!d.querySelector('[data-role="customer"]'),'Customer role removed');
+    assert(!d.querySelector('.workspace'),'inactive workspace box removed');
+    assert(!d.querySelector('.today')&&!d.querySelector('#alerts'),'date and redundant header shortcut removed');
+    assert(d.querySelector('.sidebar-top').firstElementChild.id==='categories-toggle','menu button appears before logo');
+    assert(d.querySelector('#categories-toggle svg')&&!d.querySelector('#categories-toggle').textContent.trim(),'menu button is icon only');
+    click('#categories-toggle');assert(d.querySelector('#nav').hidden,'categories collapse');
+    assert(d.querySelector('.sidebar').getBoundingClientRect().width===0,'collapsed sidebar disappears entirely');
+    assert(d.querySelector('.shell').getBoundingClientRect().left===0,'content expands to left edge');
+    assert(!!d.querySelector('header .brand'),'logo moves into top bar');
+    assert(d.querySelector('header .sidebar-top').firstElementChild.id==='categories-toggle','collapsed header keeps button before logo');
+    if(!w.matchMedia('(prefers-reduced-motion: reduce)').matches)assert(d.getAnimations().some(a=>a.effect?.target===d.querySelector('.brand')),'logo morphs between sidebar and header');
+    else assert(d.getAnimations().length===0,'reduced-motion preference disables animation');
+    click('#categories-toggle');assert(!!d.querySelector('.sidebar .brand'),'logo returns when expanded');
+    // Rapid clicks must settle on the final layout, without stale animation state.
+    click('#categories-toggle');click('#categories-toggle');
+    await new Promise(r=>setTimeout(r,380));
+    assert(!d.body.classList.contains('nav-collapsed')&&!!d.querySelector('.sidebar .brand'),'rapid toggles settle correctly');
+    const languageTrigger=d.querySelector('#language').closest('.select-control').querySelector('.select-trigger');
+    languageTrigger.click();await new Promise(r=>setTimeout(r,100));assert(!d.querySelector('#select-menu').hidden,'custom language menu opens and stays open');
+    d.querySelector('[data-option-index="1"]').click();assert(d.documentElement.lang==='ru','custom language option applies');
+    w.setLanguage('en');
+    click('[data-action="new-order"]');
+    const product=d.querySelector('[name="product"]'),qty=d.querySelector('[name="qty"]');
+    product.value='CM-1006';product.dispatchEvent(new w.Event('change',{bubbles:true}));
+    assert(qty.max==='3','quantity maximum tracks selected stock');qty.value='4';assert(!qty.checkValidity(),'browser blocks overselling');
+    product.value='CM-1001';product.dispatchEvent(new w.Event('change',{bubbles:true}));qty.value='1';
+    d.querySelector('[name="customer"]').value='Olivia Rhye';
+    const channelTrigger=d.querySelector('[name="channel"]').closest('.select-control').querySelector('.select-trigger');channelTrigger.click();
+    channelTrigger.dispatchEvent(new w.KeyboardEvent('keydown',{key:'End',bubbles:true}));channelTrigger.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    assert(d.querySelector('[name="channel"]').value==='In-store','custom form menu supports keyboard selection');
+    d.querySelector('#order-form').requestSubmit();
+    assert(d.querySelector('#overlay').hidden,'valid staff order submitted');
+    click('[data-role="admin"]');click('#nav [href="#customers"]');
+    await new Promise(r=>setTimeout(r,50));
+    click('[data-customer="Olivia Rhye"]');assert(d.querySelectorAll('.purchase-card').length>=2,'customer opens separate purchases');click('.close');
+    click('#profile');await new Promise(r=>setTimeout(r,50));
+    assert(!!d.querySelector('#permission-form'),'admin seller permission settings');
+    d.querySelector('[name="createOrders"]').checked=false;d.querySelector('[name="salesReport"]').checked=false;d.querySelector('[name="stockReport"]').checked=false;d.querySelector('#permission-form').requestSubmit();
+    click('[data-role="seller"]');assert(!d.querySelector('[data-action="new-order"]'),'seller create action obeys admin');
+    click('#nav [href="#reports"]');await new Promise(r=>setTimeout(r,50));assert(!d.querySelector('[data-export]'),'seller exports obey admin');
+    click('[data-role="admin"]');click('#nav [href="#reports"]');await new Promise(r=>setTimeout(r,50));click('[data-export="orders"]');
+    assert(d.querySelectorAll('[name="format"] option').length===3,'three download formats');click('.close');
+    for(const locale of ['uz','ru','en']){
+      lang.value=locale;lang.dispatchEvent(new w.Event('change',{bubbles:true}));
+      click('#nav [href="#inventory"]');await new Promise(r=>setTimeout(r,50));
+      const filter=d.querySelector('#filter');filter.value='Phones';filter.dispatchEvent(new w.Event('change',{bubbles:true}));
+      assert(d.querySelectorAll('tbody tr').length===1&&d.querySelector('tbody').textContent.includes('iPhone 15 Pro'),'category filter works in '+locale);
+      w.go('dashboard');const period=d.querySelector('#period');period.value='30 days';period.dispatchEvent(new w.Event('change',{bubbles:true}));assert(d.querySelector('#period').value==='30 days','chart period works in '+locale);
+    }
+    w.setLanguage('ru');
+    await new Promise(resolve=>{frame.onload=resolve;w.location.reload()});
+    const fresh=frame.contentWindow.document;
+    assert(fresh.documentElement.lang==='uz'&&fresh.querySelector('#language').value==='uz','reload always returns to Uzbek');
+    fresh.querySelector('[data-action="keep-uz"]').click();fresh.querySelector('[data-role="seller"]').click();
+    assert(!fresh.querySelector('[data-action="new-order"]'),'administrator permissions survive reload');
+    document.querySelector('#result').textContent='PASS '+checks.length+' browser checks\n'+checks.join('\n');
+  }catch(error){document.querySelector('#result').textContent='FAIL '+error.stack+'\n'+checks.join('\n')}
+};
+</script>

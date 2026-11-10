@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>ERP layout check</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}iframe{width:100%;height:100%;border:0}#result{position:absolute;bottom:0;background:#fff;padding:2px;font:10px monospace}</style><iframe src="../index.html"></iframe><div id="result"></div><script>
+document.querySelector('iframe').onload=async()=>{
+ const frame=document.querySelector('iframe');
+ if(location.search.includes('mobile'))frame.style.width='390px';
+ const w=frame.contentWindow,d=w.document,failures=[];
+ const settle=()=>d.getAnimations().forEach(animation=>animation.finish());
+ w.close();
+ for(const lang of ['uz','ru','en'])for(const role of ['admin','seller']){
+   w.setLanguage(lang);d.querySelector('[data-role="'+role+'"]').click();
+   for(const a of [...d.querySelectorAll('#nav a')]){
+     w.go(a.hash.slice(1));
+     settle();
+     if(d.documentElement.scrollWidth>d.documentElement.clientWidth+1)failures.push(lang+'/'+role+'/'+a.hash+' overflows');
+     d.querySelector('#categories-toggle').click();
+     settle();
+     if(d.querySelector('.sidebar').getBoundingClientRect().width!==0)failures.push('sidebar remains visible');
+     if(d.querySelector('.shell').getBoundingClientRect().left!==0)failures.push('sidebar gap remains');
+     if(!d.querySelector('header .brand'))failures.push('brand missing from header');
+     if(d.documentElement.scrollWidth>d.documentElement.clientWidth+1)failures.push(lang+'/'+role+'/'+a.hash+' collapsed overflow');
+     d.querySelector('#categories-toggle').click();
+     settle();
+   }
+ }
+ w.setLanguage('uz');d.querySelector('[data-role="admin"]').click();
+ await new Promise(resolve=>setTimeout(resolve,100));
+ if(location.search.includes('collapsed'))d.querySelector('#categories-toggle').click();
+ settle();
+ if(location.search.includes('dropdown')){
+   d.querySelector('#language').closest('.select-control').querySelector('.select-trigger').click();
+   const rect=d.querySelector('#select-menu').getBoundingClientRect();
+   if(rect.left<0||rect.right>w.innerWidth||rect.bottom>w.innerHeight)failures.push('dropdown outside viewport');
+ }
+ document.querySelector('#result').textContent=failures.length?'FAIL '+failures.join('; '):'PASS all roles/pages/languages fit '+d.documentElement.clientWidth+'px';
+};
+</script>
